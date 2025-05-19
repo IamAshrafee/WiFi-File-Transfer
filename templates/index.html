@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WiFi File Transfer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#1a73e8",
+              "primary-dark": "#1557b0",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="min-h-screen bg-gray-100 p-4 md:p-6">
+    <div
+      class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6 md:p-8"
+    >
+      <div class="text-center">
+        <h1 class="text-2xl md:text-3xl font-bold text-primary mb-8">
+          WiFi File Transfer
+        </h1>
+
+        <form
+          class="upload-form space-y-6"
+          action="/upload"
+          method="post"
+          enctype="multipart/form-data"
+        >
+          <div class="flex flex-col items-center">
+            <label for="file-input" class="w-full">
+              <div
+                class="w-full border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-primary transition-colors"
+              >
+                <div class="text-center">
+                  <svg
+                    class="mx-auto h-12 w-12 text-gray-400"
+                    stroke="currentColor"
+                    fill="none"
+                    viewBox="0 0 48 48"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M24 8l12 12m0 0l-12 12m12-12H12"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <div class="mt-4 flex text-sm text-gray-600">
+                    <span
+                      class="relative rounded-md font-medium text-primary hover:text-primary-dark focus-within:outline-none"
+                    >
+                      Upload files
+                    </span>
+                    <p class="pl-1">or drag and drop</p>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-2">
+                    Any file type allowed
+                  </p>
+                </div>
+              </div>
+              <input
+                id="file-input"
+                type="file"
+                name="file"
+                class="hidden"
+                required
+                multiple
+                aria-label="Choose files to upload"
+              />
+            </label>
+          </div>
+
+          <div id="file-list" class="mt-4 space-y-2 text-left"></div>
+
+          <button
+            type="submit"
+            class="w-full bg-primary text-white py-3 px-6 rounded-lg hover:bg-primary-dark transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+          >
+            Upload Files
+          </button>
+        </form>
+
+        <div id="status" class="mt-6 text-green-600 hidden"></div>
+      </div>
+    </div>
+
+    <script>
+      const fileInput = document.getElementById("file-input");
+      const fileList = document.getElementById("file-list");
+      const status = document.getElementById("status");
+
+      fileInput.addEventListener("change", (e) => {
+        fileList.innerHTML = "";
+        Array.from(e.target.files).forEach((file) => {
+          const fileItem = document.createElement("div");
+          fileItem.className =
+            "flex items-center text-sm text-gray-600 bg-gray-50 p-2 rounded";
+          fileItem.innerHTML = `
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            ${file.name}
+          `;
+          fileList.appendChild(fileItem);
+        });
+      });
+
+      document.querySelector("form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+
+        try {
+          const response = await fetch("/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (response.ok) {
+            status.textContent = "Files uploaded successfully!";
+            status.classList.remove("hidden", "text-red-600");
+            status.classList.add("text-green-600");
+            fileInput.value = "";
+            fileList.innerHTML = "";
+          } else {
+            throw new Error("Upload failed");
+          }
+        } catch (error) {
+          status.textContent = "Failed to upload files. Please try again.";
+          status.classList.remove("hidden", "text-green-600");
+          status.classList.add("text-red-600");
+        }
+
+        status.classList.remove("hidden");
+        setTimeout(() => {
+          status.classList.add("hidden");
+        }, 3000);
+      });
+
+      // Drag and drop support
+      const dropZone = document.querySelector(".border-dashed");
+
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+      });
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, highlight, false);
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+      });
+
+      function highlight(e) {
+        dropZone.classList.add("border-primary", "bg-blue-50");
+      }
+
+      function unhighlight(e) {
+        dropZone.classList.remove("border-primary", "bg-blue-50");
+      }
+
+      dropZone.addEventListener("drop", handleDrop, false);
+
+      function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        fileInput.files = files;
+
+        // Trigger change event
+        const event = new Event("change");
+        fileInput.dispatchEvent(event);
+      }
+    </script>
+  </body>
+</html>
