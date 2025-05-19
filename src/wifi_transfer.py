@@ -451,13 +451,6 @@ class App(ctk.CTk):
         )
         self.folder_button.grid(row=3, column=0, padx=20, pady=10)
 
-        self.qr_label = ctk.CTkLabel(
-            self.main_frame,
-            text="Scan QR Code to Upload Files",
-            font=("Arial", 14)
-        )
-        self.qr_label.grid(row=4, column=0, padx=20, pady=10)
-
     def toggle_server(self):
         if not self.is_server_running:
             try:
@@ -501,10 +494,13 @@ class App(ctk.CTk):
             self.ip_label.configure(text="")
             self.start_button.configure(state="normal", text="Start Server")
             
-            # Clear QR code display
+            # Clear QR code display and instruction label
             if hasattr(self, 'qr_display'):
                 self.qr_display.destroy()
                 delattr(self, 'qr_display')
+            if hasattr(self, 'qr_label'):
+                self.qr_label.destroy()
+                delattr(self, 'qr_label')
             
             logger.info("Server state reset successfully")
         except Exception as e:
@@ -533,17 +529,28 @@ class App(ctk.CTk):
                 size=(200, 200)
             )
             
-            # Always create a new QR display label
+            # Always create a new QR display label and instruction label
             if hasattr(self, 'qr_display'):
                 self.qr_display.destroy()
+            if hasattr(self, 'qr_label'):
+                self.qr_label.destroy()
             
+            # Create the instruction label
+            self.qr_label = ctk.CTkLabel(
+                self.main_frame,
+                text="Scan QR Code to Upload Files",
+                font=("Arial", 14)
+            )
+            self.qr_label.grid(row=4, column=0, padx=20, pady=10)
+            
+            # Create the QR code display
             self.qr_display = ctk.CTkLabel(
                 self.main_frame,
                 text="",
                 image=self.qr_image
             )
             self.qr_display.grid(row=5, column=0, padx=20, pady=10)
-            logger.info("QR code displayed successfully")
+            logger.info("QR code and instructions displayed successfully")
                 
         except Exception as e:
             logger.error(f"Failed to display QR code: {str(e)}")
