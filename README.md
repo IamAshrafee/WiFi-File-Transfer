@@ -12,6 +12,8 @@ A modern and user-friendly application that enables quick file transfers between
 - **Progress Tracking**: Visual feedback for file uploads
 - **Responsive Design**: Works on all screen sizes
 - **Multiple Files**: Upload multiple files at once
+- **Desktop Notifications**: Get notified when files are received
+- **Automatic Directory Creation**: No manual setup needed
 
 ## 🚀 Quick Start
 
@@ -67,12 +69,19 @@ WiFi-File-Transfer/
 │   ├── __init__.py
 │   └── wifi_transfer.py
 ├── static/            # Static files
+│   ├── css/
+│   │   └── style.css
+│   └── images/        # Application images and logo
+│       └── png/       # Application icons
 ├── templates/         # HTML templates
 │   └── index.html
+├── scripts/          # Utility scripts
+│   └── resize_logo.py
 ├── uploads/          # Default upload directory
-├── requirements.txt   # Python dependencies
-├── run.py            # Application runner
-└── README.md         # Documentation
+├── logs/            # Application logs
+├── requirements.txt  # Python dependencies
+├── run.py           # Application runner
+└── README.md        # Documentation
 ```
 
 ## 🔒 Security Note
@@ -89,10 +98,10 @@ This application creates a local server accessible to all devices on your networ
 Want to contribute? Great! Please:
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## 🐛 Known Issues
 

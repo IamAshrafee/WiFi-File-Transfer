@@ -33,9 +33,14 @@ ENV/
 
 # Project specific
 uploads/
+logs/
 static/qr_code.png
 *.log
+temp/
+.env
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+desktop.ini 
+/scripts
