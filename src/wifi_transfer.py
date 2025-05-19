@@ -375,26 +375,6 @@ class App(ctk.CTk):
             logger.error(f"Failed to initialize application window: {str(e)}")
             raise
 
-    def _create_logo_label(self):
-        """Create the logo label with proper error handling"""
-        try:
-            self.logo_label = ctk.CTkLabel(
-                self,
-                text="",
-                image=self.header_logo
-            )
-            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
-            
-        except Exception as e:
-            logger.error(f"Failed to create logo label: {str(e)}")
-            # Create a minimal label as last resort
-            self.logo_label = ctk.CTkLabel(
-                self,
-                text="WiFi File Transfer",
-                font=("Arial", 20, "bold")
-            )
-            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
-
     def _setup_ui(self):
         try:
             # Configure grid with proper weights
@@ -415,6 +395,26 @@ class App(ctk.CTk):
         except Exception as e:
             logger.error(f"Failed to setup UI: {str(e)}")
             raise
+
+    def _create_logo_label(self):
+        """Create the logo label with proper error handling"""
+        try:
+            self.logo_label = ctk.CTkLabel(
+                self,
+                text="",
+                image=self.header_logo
+            )
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
+            
+        except Exception as e:
+            logger.error(f"Failed to create logo label: {str(e)}")
+            # Create a minimal label as last resort
+            self.logo_label = ctk.CTkLabel(
+                self,
+                text="WiFi File Transfer",
+                font=("Arial", 20, "bold")
+            )
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
 
     def _create_main_frame(self):
         self.main_frame = ctk.CTkFrame(self)
@@ -485,36 +485,6 @@ class App(ctk.CTk):
                 messagebox.showerror("Error", f"Failed to stop server: {str(e)}")
                 self.start_button.configure(state="normal", text="Stop Server")
 
-    def _reset_server_state(self):
-        """Reset the UI state after server shutdown"""
-        try:
-            self.server_thread = None
-            self.is_server_running = False
-            self.status_label.configure(text="Server Status: Not Running")
-            self.ip_label.configure(text="")
-            self.start_button.configure(state="normal", text="Start Server")
-            
-            # Clear QR code display and instruction label
-            if hasattr(self, 'qr_display'):
-                self.qr_display.destroy()
-                delattr(self, 'qr_display')
-            if hasattr(self, 'qr_label'):
-                self.qr_label.destroy()
-                delattr(self, 'qr_label')
-            
-            logger.info("Server state reset successfully")
-        except Exception as e:
-            logger.error(f"Error resetting server state: {str(e)}")
-            self.start_button.configure(state="normal", text="Start Server")
-
-    def open_folder(self):
-        try:
-            os.startfile(UPLOAD_FOLDER)
-            logger.info(f"Opened uploads folder: {UPLOAD_FOLDER}")
-        except Exception as e:
-            logger.error(f"Failed to open uploads folder: {str(e)}")
-            messagebox.showerror("Error", f"Failed to open folder: {str(e)}")
-
     def display_qr_code(self, qr_path):
         try:
             # Load and resize QR code image
@@ -555,6 +525,36 @@ class App(ctk.CTk):
         except Exception as e:
             logger.error(f"Failed to display QR code: {str(e)}")
             messagebox.showerror("Error", f"Failed to display QR code: {str(e)}")
+
+    def _reset_server_state(self):
+        """Reset the UI state after server shutdown"""
+        try:
+            self.server_thread = None
+            self.is_server_running = False
+            self.status_label.configure(text="Server Status: Not Running")
+            self.ip_label.configure(text="")
+            self.start_button.configure(state="normal", text="Start Server")
+            
+            # Clear QR code display and instruction label
+            if hasattr(self, 'qr_display'):
+                self.qr_display.destroy()
+                delattr(self, 'qr_display')
+            if hasattr(self, 'qr_label'):
+                self.qr_label.destroy()
+                delattr(self, 'qr_label')
+            
+            logger.info("Server state reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting server state: {str(e)}")
+            self.start_button.configure(state="normal", text="Start Server")
+
+    def open_folder(self):
+        try:
+            os.startfile(UPLOAD_FOLDER)
+            logger.info(f"Opened uploads folder: {UPLOAD_FOLDER}")
+        except Exception as e:
+            logger.error(f"Failed to open uploads folder: {str(e)}")
+            messagebox.showerror("Error", f"Failed to open folder: {str(e)}")
 
     def on_closing(self):
         """Handle window closing event"""
