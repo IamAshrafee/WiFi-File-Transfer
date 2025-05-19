@@ -91,33 +91,104 @@ except Exception as e:
     logger.error(f"Critical error setting up upload folder: {str(e)}")
     raise
 
+class LogoManager:
+    """Manages logo assets and their usage throughout the application"""
+    
+    SIZES = {
+        'small': (32, 32),
+        'medium': (64, 64),
+        'large': (128, 128),
+        'xlarge': (256, 256)
+    }
+    
+    def __init__(self):
+        self.base_dir = os.path.dirname(os.path.dirname(__file__))
+        self.images_dir = os.path.join(self.base_dir, 'static', 'images')
+        self.png_dir = os.path.join(self.images_dir, 'png')
+        self.cached_images = {}
+        
+    def get_icon_path(self):
+        """Get the best available icon for window and taskbar"""
+        icon_paths = [
+            os.path.join(self.png_dir, 'logo.ico'),
+            os.path.join(self.png_dir, 'logo-normal.png'),
+            os.path.join(self.images_dir, 'logo.ico'),
+            os.path.join(self.images_dir, 'logo-normal.png')
+        ]
+        
+        for path in icon_paths:
+            if os.path.exists(path):
+                return path
+        return None
+        
+    def get_notification_icon(self):
+        """Get icon path for system notifications"""
+        icon_path = os.path.join(self.png_dir, 'logo.ico')
+        if os.path.exists(icon_path):
+            return icon_path
+            
+        # Fallback to PNG
+        png_path = os.path.join(self.png_dir, 'logo-normal.png')
+        if os.path.exists(png_path):
+            return png_path
+            
+        return None
+        
+    def get_logo_image(self, size='large', for_dark_mode=False):
+        """Get CTkImage for the specified size, with dark mode support"""
+        cache_key = f"{size}_{'dark' if for_dark_mode else 'light'}"
+        
+        if cache_key in self.cached_images:
+            return self.cached_images[cache_key]
+            
+        dimensions = self.SIZES.get(size, self.SIZES['large'])
+        
+        # Try to find the best image for the requested size
+        image_paths = [
+            os.path.join(self.png_dir, f'logo_{size}.png'),
+            os.path.join(self.images_dir, f'logo_{size}.png'),
+            os.path.join(self.png_dir, 'logo-normal.png'),
+            os.path.join(self.images_dir, 'logo-normal.png')
+        ]
+        
+        for path in image_paths:
+            if os.path.exists(path):
+                try:
+                    image = Image.open(path)
+                    # Create CTkImage with both light and dark variants
+                    ctk_image = ctk.CTkImage(
+                        light_image=image,
+                        dark_image=image,
+                        size=dimensions
+                    )
+                    self.cached_images[cache_key] = ctk_image
+                    return ctk_image
+                except Exception as e:
+                    logger.error(f"Failed to load logo image {path}: {str(e)}")
+                    continue
+        
+        # Create empty image as fallback
+        empty_image = Image.new('RGB', dimensions, color='white')
+        ctk_image = ctk.CTkImage(
+            light_image=empty_image,
+            dark_image=empty_image,
+            size=dimensions
+        )
+        self.cached_images[cache_key] = ctk_image
+        return ctk_image
+
+# Update the show_notification function to use LogoManager
 def show_notification(title, message):
     """Show a Windows notification with application icon"""
     try:
-        # Get the base directory (src's parent directory)
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        icon_path = os.path.join(base_dir, 'static', 'images', 'png', 'logo.ico')
+        logo_manager = LogoManager()
+        icon_path = logo_manager.get_notification_icon()
         
-        logger.debug(f"Notification icon path: {icon_path}")
-        
-        # Verify the icon exists
-        if not os.path.exists(icon_path):
-            logger.warning(f"Notification icon not found at: {icon_path}")
-            # Try the PNG version as fallback
-            png_path = os.path.join(base_dir, 'static', 'images', 'png', 'logo-normal.png')
-            if os.path.exists(png_path):
-                logger.info("Using PNG as fallback icon")
-                icon_path = png_path
-            else:
-                logger.warning("No suitable icon file found")
-                icon_path = None
-        
-        # Show the notification
         toaster.show_toast(
             title,
             message,
             icon_path=icon_path,
-            duration=5,
+            duration=2,
             threaded=True
         )
         logger.info(f"Notification shown - Title: {title}, Message: {message}")
@@ -129,7 +200,7 @@ def show_notification(title, message):
             toaster.show_toast(
                 title,
                 message,
-                duration=5,
+                duration=2,
                 threaded=True
             )
             logger.info("Fallback notification shown without icon")
@@ -285,14 +356,17 @@ class App(ctk.CTk):
             self.geometry("400x600")
             self.protocol("WM_DELETE_WINDOW", self.on_closing)
             
-            # Set window icon
-            self.icon_path = self._get_icon_path()
-            if self.icon_path:
-                self.after(200, lambda: self.iconbitmap(self.icon_path))
-                logger.debug(f"Window icon set successfully: {self.icon_path}")
+            # Initialize logo manager
+            self.logo_manager = LogoManager()
             
-            # Load logo image
-            self.logo_image = self._load_logo_image()
+            # Set window icon
+            icon_path = self.logo_manager.get_icon_path()
+            if icon_path:
+                self.after(200, lambda: self.iconbitmap(icon_path))
+                logger.debug(f"Window icon set successfully: {icon_path}")
+            
+            # Load logo image for header
+            self.header_logo = self.logo_manager.get_logo_image('large')
             
             self._setup_ui()
             logger.info("Application UI initialized successfully")
@@ -301,73 +375,14 @@ class App(ctk.CTk):
             logger.error(f"Failed to initialize application window: {str(e)}")
             raise
 
-    def _get_icon_path(self):
-        """Get the path to the application icon, trying different formats"""
-        base_dir = os.path.dirname(os.path.dirname(__file__))
-        icon_paths = [
-            os.path.join(base_dir, 'static', 'images', 'png', 'logo.ico'),
-            os.path.join(base_dir, 'static', 'images', 'png', 'logo-normal.png'),
-            os.path.join(base_dir, 'static', 'images', 'logo.ico'),
-            os.path.join(base_dir, 'static', 'images', 'logo-normal.png')
-        ]
-        
-        for path in icon_paths:
-            if os.path.exists(path):
-                return path
-        
-        logger.warning("No suitable icon found in any of the expected locations")
-        return None
-
-    def _load_logo_image(self):
-        """Load the logo image for the application"""
-        try:
-            base_dir = os.path.dirname(os.path.dirname(__file__))
-            logo_paths = [
-                os.path.join(base_dir, 'static', 'images', 'png', 'logo_large.png'),
-                os.path.join(base_dir, 'static', 'images', 'logo_large.png'),
-                os.path.join(base_dir, 'static', 'images', 'png', 'logo-normal.png'),
-                os.path.join(base_dir, 'static', 'images', 'logo-normal.png')
-            ]
-            
-            for logo_path in logo_paths:
-                if os.path.exists(logo_path):
-                    logger.debug(f"Found logo image at: {logo_path}")
-                    return ctk.CTkImage(
-                        light_image=Image.open(logo_path),
-                        dark_image=Image.open(logo_path),
-                        size=(100, 100)
-                    )
-            
-            logger.warning("No logo image found, creating empty image")
-            # Create an empty image if no logo found
-            empty_image = Image.new('RGB', (100, 100), color='white')
-            return ctk.CTkImage(
-                light_image=empty_image,
-                dark_image=empty_image,
-                size=(100, 100)
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to load logo image: {str(e)}")
-            # Return None and handle in _create_logo_label
-            return None
-
     def _create_logo_label(self):
         """Create the logo label with proper error handling"""
         try:
-            if hasattr(self, 'logo_image') and self.logo_image is not None:
-                self.logo_label = ctk.CTkLabel(
-                    self,
-                    text="",  # Empty text when showing image
-                    image=self.logo_image
-                )
-            else:
-                # Fallback to text-only label if image loading failed
-                self.logo_label = ctk.CTkLabel(
-                    self,
-                    text="WiFi File Transfer",
-                    font=("Arial", 20, "bold")
-                )
+            self.logo_label = ctk.CTkLabel(
+                self,
+                text="",
+                image=self.header_logo
+            )
             self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
             
         except Exception as e:
@@ -375,7 +390,8 @@ class App(ctk.CTk):
             # Create a minimal label as last resort
             self.logo_label = ctk.CTkLabel(
                 self,
-                text="WiFi File Transfer"
+                text="WiFi File Transfer",
+                font=("Arial", 20, "bold")
             )
             self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
 

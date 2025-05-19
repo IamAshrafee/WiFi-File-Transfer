@@ -1,0 +1,73 @@
+/* Logo styles for consistent branding across the application */
+
+.logo-small {
+  width: 32px;
+  height: 32px;
+  background-image: url("../images/png/logo_small.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.logo-medium {
+  width: 64px;
+  height: 64px;
+  background-image: url("../images/png/logo_medium.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.logo-large {
+  width: 128px;
+  height: 128px;
+  background-image: url("../images/png/logo_large.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.logo-xlarge {
+  width: 256px;
+  height: 256px;
+  background-image: url("../images/png/logo_xlarge.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* Responsive logo classes */
+@media (max-width: 768px) {
+  .logo-responsive {
+    width: 32px;
+    height: 32px;
+    background-image: url("../images/png/logo_small.png");
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .logo-responsive {
+    width: 64px;
+    height: 64px;
+    background-image: url("../images/png/logo_medium.png");
+  }
+}
+
+@media (min-width: 1025px) {
+  .logo-responsive {
+    width: 128px;
+    height: 128px;
+    background-image: url("../images/png/logo_large.png");
+  }
+}
+
+/* High DPI (Retina) Display Support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .logo-responsive {
+    background-image: url("../images/png/logo_xlarge.png");
+  }
+}
+
+/* Common properties for all logos */
+[class*="logo-"] {
+  display: inline-block;
+  vertical-align: middle;
+  background-position: center;
+  background-repeat: no-repeat;
+}

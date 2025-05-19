@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}WiFi File Transfer{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{ url_for('static', filename='images/favicon.svg') }}"
+    />
+    <link
+      rel="alternate icon"
+      type="image/x-icon"
+      href="{{ url_for('static', filename='images/png/logo.ico') }}"
+    />
+
+    <!-- Logo Styles -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/logo.css') }}"
+    />
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <header>
+      <nav class="navbar">
+        <div class="navbar-brand">
+          <a href="{{ url_for('index') }}" class="logo-link">
+            <div class="logo-responsive"></div>
+            <span class="brand-name">WiFi File Transfer</span>
+          </a>
+        </div>
+        {% block navbar %}{% endblock %}
+      </nav>
+    </header>
+
+    <main>{% block content %}{% endblock %}</main>
+
+    <footer>
+      <div class="footer-logo">
+        <div class="logo-small"></div>
+        <p>&copy; {% now 'Y' %} WiFi File Transfer. All rights reserved.</p>
+      </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
