@@ -35,6 +35,22 @@ def setup_logging():
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def is_port_available(port):
+    """Check if a port is available."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', port))
+            return True
+    except OSError:
+        return False
+
+def find_available_port(start_port=5000, max_port=5050):
+    """Find an available port in the given range."""
+    for port in range(start_port, max_port):
+        if is_port_available(port):
+            return port
+    raise RuntimeError(f"No available ports found between {start_port} and {max_port}")
+
 # Initialize Flask app and notification
 try:
     server = Flask(__name__, 
@@ -48,12 +64,31 @@ except Exception as e:
     raise
 
 # Configure upload folder
+def setup_upload_directory():
+    """Setup and verify the upload directory with proper permissions"""
+    try:
+        upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Test write permissions
+        test_file = os.path.join(upload_dir, '.test')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except (IOError, OSError) as e:
+            raise RuntimeError(f"Upload directory is not writable: {str(e)}")
+            
+        logger.info(f"Upload folder configured and verified at: {upload_dir}")
+        return upload_dir
+    except Exception as e:
+        logger.error(f"Failed to setup upload directory: {str(e)}")
+        raise
+
 try:
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    logger.info(f"Upload folder configured at: {UPLOAD_FOLDER}")
+    UPLOAD_FOLDER = setup_upload_directory()
 except Exception as e:
-    logger.error(f"Failed to create upload folder: {str(e)}")
+    logger.error(f"Critical error setting up upload folder: {str(e)}")
     raise
 
 def show_notification(title, message):
@@ -105,17 +140,18 @@ class ServerThread(threading.Thread):
     def __init__(self, app):
         threading.Thread.__init__(self, daemon=True)
         try:
-            self.srv = make_server('0.0.0.0', 5000, app)
+            self.port = find_available_port()
+            self.srv = make_server('0.0.0.0', self.port, app)
             self.ctx = app.app_context()
             self.ctx.push()
-            logger.info("Server thread initialized successfully")
+            logger.info(f"Server thread initialized successfully on port {self.port}")
         except Exception as e:
             logger.error(f"Failed to initialize server thread: {str(e)}")
             raise
 
     def run(self):
         try:
-            logger.info("Starting server...")
+            logger.info(f"Starting server on port {self.port}...")
             self.srv.serve_forever()
         except Exception as e:
             logger.error(f"Server error: {str(e)}")
@@ -133,7 +169,7 @@ class ServerThread(threading.Thread):
 
     def _shutdown(self):
         try:
-            requests.get('http://localhost:5000/')
+            requests.get(f'http://localhost:{self.port}/')
         except requests.exceptions.RequestException:
             logger.debug("Expected connection error during shutdown")
         
@@ -165,18 +201,30 @@ def upload_file():
         for file in files:
             if file.filename:
                 try:
-                    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+                    # Sanitize filename
+                    filename = os.path.basename(file.filename)
+                    file_path = os.path.join(UPLOAD_FOLDER, filename)
+                    
+                    # Check available space
+                    try:
+                        total, used, free = os.statvfs(UPLOAD_FOLDER)[0:6:2]
+                        if free * total < file.content_length:
+                            return 'Not enough disk space', 507
+                    except AttributeError:
+                        # statvfs not available on Windows
+                        pass
+                    
                     file.save(file_path)
                     
                     file_size = os.path.getsize(file_path)
                     readable_size = humanize.naturalsize(file_size)
                     
-                    logger.info(f"File uploaded successfully: {file.filename} ({readable_size})")
-                    uploaded_files.append(file.filename)
+                    logger.info(f"File uploaded successfully: {filename} ({readable_size})")
+                    uploaded_files.append(filename)
                     
                     show_notification(
                         "File Received",
-                        f"Name: {file.filename}\nSize: {readable_size}"
+                        f"Name: {filename}\nSize: {readable_size}"
                     )
                 except Exception as e:
                     logger.error(f"Error saving file {file.filename}: {str(e)}")
@@ -201,16 +249,29 @@ def get_local_ip():
         return "127.0.0.1"
 
 def generate_qr_code(url):
+    """Generate QR code for the given URL"""
     try:
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(url)
         qr.make(fit=True)
         qr_image = qr.make_image(fill_color="black", back_color="white")
         
-        qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'qr_code.png')
-        qr_image.save(qr_path)
+        # Ensure static directory exists
+        static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+        os.makedirs(static_dir, exist_ok=True)
         
-        logger.info(f"QR code generated for URL: {url}")
+        qr_path = os.path.join(static_dir, 'qr_code.png')
+        
+        # Save with error handling
+        try:
+            qr_image.save(qr_path)
+        except Exception as e:
+            logger.error(f"Failed to save QR code image: {str(e)}")
+            # Try alternative location if static directory is not writable
+            qr_path = os.path.join(UPLOAD_FOLDER, 'qr_code.png')
+            qr_image.save(qr_path)
+            
+        logger.info(f"QR code generated and saved at: {qr_path}")
         return qr_path
     except Exception as e:
         logger.error(f"Failed to generate QR code: {str(e)}")
@@ -222,16 +283,17 @@ class App(ctk.CTk):
             super().__init__()
             self.title("WiFi File Transfer")
             self.geometry("400x600")
+            self.protocol("WM_DELETE_WINDOW", self.on_closing)
             
             # Set window icon
-            icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
-                                   'static', 'images', 'png', 'logo.ico')
-            if os.path.exists(icon_path):
-                self.after(200, lambda: self.iconbitmap(icon_path))
-                logger.debug("Window icon set successfully")
-            else:
-                logger.warning(f"Window icon not found at: {icon_path}")
-
+            self.icon_path = self._get_icon_path()
+            if self.icon_path:
+                self.after(200, lambda: self.iconbitmap(self.icon_path))
+                logger.debug(f"Window icon set successfully: {self.icon_path}")
+            
+            # Load logo image
+            self.logo_image = self._load_logo_image()
+            
             self._setup_ui()
             logger.info("Application UI initialized successfully")
             
@@ -239,46 +301,104 @@ class App(ctk.CTk):
             logger.error(f"Failed to initialize application window: {str(e)}")
             raise
 
-    def _setup_ui(self):
-        try:
-            # Configure grid
-            self.grid_columnconfigure(0, weight=1)
-            self.grid_rowconfigure(1, weight=1)
+    def _get_icon_path(self):
+        """Get the path to the application icon, trying different formats"""
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        icon_paths = [
+            os.path.join(base_dir, 'static', 'images', 'png', 'logo.ico'),
+            os.path.join(base_dir, 'static', 'images', 'png', 'logo-normal.png'),
+            os.path.join(base_dir, 'static', 'images', 'logo.ico'),
+            os.path.join(base_dir, 'static', 'images', 'logo-normal.png')
+        ]
+        
+        for path in icon_paths:
+            if os.path.exists(path):
+                return path
+        
+        logger.warning("No suitable icon found in any of the expected locations")
+        return None
 
-            # Load and display logo
-            logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
-                                   'static', 'images', 'png', 'logo_large.png')
+    def _load_logo_image(self):
+        """Load the logo image for the application"""
+        try:
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+            logo_paths = [
+                os.path.join(base_dir, 'static', 'images', 'png', 'logo_large.png'),
+                os.path.join(base_dir, 'static', 'images', 'logo_large.png'),
+                os.path.join(base_dir, 'static', 'images', 'png', 'logo-normal.png'),
+                os.path.join(base_dir, 'static', 'images', 'logo-normal.png')
+            ]
             
-            if not os.path.exists(logo_path):
-                logger.warning(f"Logo file not found at: {logo_path}")
-                raise FileNotFoundError(f"Logo file not found: {logo_path}")
+            for logo_path in logo_paths:
+                if os.path.exists(logo_path):
+                    logger.debug(f"Found logo image at: {logo_path}")
+                    return ctk.CTkImage(
+                        light_image=Image.open(logo_path),
+                        dark_image=Image.open(logo_path),
+                        size=(100, 100)
+                    )
             
-            self.logo_image = ctk.CTkImage(
-                light_image=Image.open(logo_path),
-                dark_image=Image.open(logo_path),
+            logger.warning("No logo image found, creating empty image")
+            # Create an empty image if no logo found
+            empty_image = Image.new('RGB', (100, 100), color='white')
+            return ctk.CTkImage(
+                light_image=empty_image,
+                dark_image=empty_image,
                 size=(100, 100)
             )
             
+        except Exception as e:
+            logger.error(f"Failed to load logo image: {str(e)}")
+            # Return None and handle in _create_logo_label
+            return None
+
+    def _create_logo_label(self):
+        """Create the logo label with proper error handling"""
+        try:
+            if hasattr(self, 'logo_image') and self.logo_image is not None:
+                self.logo_label = ctk.CTkLabel(
+                    self,
+                    text="",  # Empty text when showing image
+                    image=self.logo_image
+                )
+            else:
+                # Fallback to text-only label if image loading failed
+                self.logo_label = ctk.CTkLabel(
+                    self,
+                    text="WiFi File Transfer",
+                    font=("Arial", 20, "bold")
+                )
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
+            
+        except Exception as e:
+            logger.error(f"Failed to create logo label: {str(e)}")
+            # Create a minimal label as last resort
+            self.logo_label = ctk.CTkLabel(
+                self,
+                text="WiFi File Transfer"
+            )
+            self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
+
+    def _setup_ui(self):
+        try:
+            # Configure grid with proper weights
+            self.grid_columnconfigure(0, weight=1)
+            for i in range(5):  # Adjust based on number of rows
+                self.grid_rowconfigure(i, weight=1)
+
             # Create UI elements
             self._create_logo_label()
             self._create_main_frame()
             self._create_status_labels()
             self._create_buttons()
             
-            self.server_running = False
+            # Initialize server state
             self.server_thread = None
+            self.is_server_running = False
             
         except Exception as e:
-            logger.error(f"Error setting up UI: {str(e)}")
+            logger.error(f"Failed to setup UI: {str(e)}")
             raise
-
-    def _create_logo_label(self):
-        self.logo_label = ctk.CTkLabel(
-            self,
-            text="",
-            image=self.logo_image
-        )
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 0))
 
     def _create_main_frame(self):
         self.main_frame = ctk.CTkFrame(self)
@@ -323,14 +443,14 @@ class App(ctk.CTk):
         self.qr_label.grid(row=4, column=0, padx=20, pady=10)
 
     def toggle_server(self):
-        if not self.server_running:
+        if not self.is_server_running:
             try:
                 self.server_thread = ServerThread(server)
                 self.server_thread.start()
-                self.server_running = True
+                self.is_server_running = True
                 
                 ip_address = get_local_ip()
-                url = f"http://{ip_address}:5000"
+                url = f"http://{ip_address}:{self.server_thread.port}"
                 self.status_label.configure(text="Server Status: Running")
                 self.ip_label.configure(text=f"Access URL: {url}")
                 self.start_button.configure(text="Stop Server")
@@ -343,18 +463,37 @@ class App(ctk.CTk):
             except Exception as e:
                 logger.error(f"Failed to start server: {str(e)}")
                 messagebox.showerror("Error", f"Failed to start server: {str(e)}")
-                self.server_running = False
+                self.is_server_running = False
         else:
             try:
                 if self.server_thread:
                     self.start_button.configure(state="disabled", text="Stopping...")
                     self.server_thread.shutdown()
-                    self.after(1000, self._complete_shutdown)
+                    self.after(1000, self._reset_server_state)
                     logger.info("Server shutdown initiated")
             except Exception as e:
                 logger.error(f"Failed to stop server: {str(e)}")
                 messagebox.showerror("Error", f"Failed to stop server: {str(e)}")
                 self.start_button.configure(state="normal", text="Stop Server")
+
+    def _reset_server_state(self):
+        """Reset the UI state after server shutdown"""
+        try:
+            self.server_thread = None
+            self.is_server_running = False
+            self.status_label.configure(text="Server Status: Not Running")
+            self.ip_label.configure(text="")
+            self.start_button.configure(state="normal", text="Start Server")
+            
+            # Clear QR code display
+            if hasattr(self, 'qr_display'):
+                self.qr_display.destroy()
+                delattr(self, 'qr_display')
+            
+            logger.info("Server state reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting server state: {str(e)}")
+            self.start_button.configure(state="normal", text="Start Server")
 
     def open_folder(self):
         try:
@@ -394,34 +533,39 @@ class App(ctk.CTk):
             logger.error(f"Failed to display QR code: {str(e)}")
             messagebox.showerror("Error", f"Failed to display QR code: {str(e)}")
 
-    def _complete_shutdown(self):
-        try:
-            self.server_thread = None
-            self.server_running = False
-            self.status_label.configure(text="Server Status: Not Running")
-            self.ip_label.configure(text="")
-            self.start_button.configure(state="normal", text="Start Server")
-            if hasattr(self, 'qr_display'):
-                self.qr_display.destroy()
-            logger.info("Server shutdown completed")
-        except Exception as e:
-            logger.error(f"Error during shutdown completion: {str(e)}")
-
     def on_closing(self):
+        """Handle window closing event"""
         try:
-            if self.server_running and self.server_thread:
-                logger.info("Shutting down server before closing application")
-                self.server_thread.shutdown()
-            self.quit()
-            logger.info("Application closed successfully")
+            if self.is_server_running:
+                if messagebox.askokcancel("Quit", "The server is still running. Do you want to stop it and quit?"):
+                    self._complete_shutdown()
+            else:
+                self._complete_shutdown()
         except Exception as e:
             logger.error(f"Error during application shutdown: {str(e)}")
+            self._complete_shutdown()
+
+    def _complete_shutdown(self):
+        """Complete shutdown of the application"""
+        try:
+            if self.server_thread and self.is_server_running:
+                logger.info("Stopping server thread...")
+                self.server_thread.shutdown()
+                self.is_server_running = False
+            
+            logger.info("Destroying main window...")
             self.quit()
+            self.destroy()
+            
+        except Exception as e:
+            logger.error(f"Error during complete shutdown: {str(e)}")
+            # Force quit in case of error
+            import sys
+            sys.exit(1)
 
 if __name__ == '__main__':
     try:
         app = App()
-        app.protocol("WM_DELETE_WINDOW", app.on_closing)
         logger.info("Starting application main loop")
         app.mainloop()
     except Exception as e:
